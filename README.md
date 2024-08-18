@@ -31,12 +31,12 @@ This project implements a basic ray tracer in C++ that supports the rendering of
 
 1. **Compile** the C++ code using a C++11 or higher compatible compiler:
    ```sh
-   g++ -std=c++11 raytracer.cpp -o raytracer
+   g++ -std=c++11 Raytracer.cpp -o Raytracer
    ```
 
 2. **Execute** the compiled program:
    ```sh
-   ./raytracer
+   ./Raytracer
    ```
 
 3. The program will read mesh data from a file, compute intersections, and generate an image based on the specified camera, lights, and materials.
