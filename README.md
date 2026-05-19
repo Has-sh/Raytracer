@@ -1,6 +1,12 @@
 # Ray Tracer in C++
 
-This project implements a basic ray tracer in C++ that supports the rendering of scenes with spheres, triangles, and meshes. The ray tracer computes intersections of camera rays with geometric primitives, handles shadows, and applies lighting to generate the final image.
+This project implements a basic ray tracer in C++ that supports the rendering of scenes with spheres, triangles, and meshes. The ray tracer computes intersections of camera rays with geometric primitives, handles shadows, and applies lighting to generate the final image ie:
+
+<img width="632" height="627" alt="image" src="https://github.com/user-attachments/assets/57110634-8c94-4d8b-a635-2941ebe88cd1" />
+
+And
+
+<img width="579" height="538" alt="image" src="https://github.com/user-attachments/assets/471b8603-98b0-4610-ae74-95c91f2c908e" />
 
 ## Features
 
