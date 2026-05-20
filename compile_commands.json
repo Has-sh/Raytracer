@@ -1,7 +1,0 @@
-[
-  {
-    "directory": "D:/Raytracer",
-    "command": "C:/msys64/ucrt64/bin/g++.exe -std=c++17 -Wall -Wextra -c Raytracer.cpp -o Raytracer.o",
-    "file": "Raytracer.cpp"
-  }
-]
