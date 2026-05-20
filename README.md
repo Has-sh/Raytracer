@@ -31,21 +31,22 @@ And
 ## Dependencies
 
 - **C++ Standard Library**: The code uses standard C++ libraries such as `<vector>`, `<tuple>`, `<cmath>`, and `<limits>`.
-- **Additional Libraries**: None required, the code is self-contained.
+- **stb_image_write** ([`stb_image_write.h`](stb_image_write.h)): public-domain single header included from [`Raytracer.cpp`](Raytracer.cpp) to write **`output.png`** (no extra link flags).
 
 ## How to Run
 
-1. **Compile** the C++ code using a C++11 or higher compatible compiler:
+1. **Compile** (single translation unit). Use **`-static`** so the `.exe` runs from PowerShell / Explorer without MSYS2 on `PATH` (otherwise MinGW DLLs are missing and the process exits with `0xC0000139`):
    ```sh
-   g++ -std=c++11 Raytracer.cpp -o Raytracer
+   g++ -std=c++17 -O2 -Wall -Wextra -static -o Raytracer.exe Raytracer.cpp
+   ```
+   Or use `make` (same flags). If **clangd** in Cursor still reports missing headers, set the C++ compiler to your MinGW `g++` or adjust [`.clangd`](.clangd) paths when you upgrade GCC.
+
+2. **Execute** with a scene file (writes **`output.png`** in the current directory). From **MSYS2 UCRT64**, you can instead add `C:\msys64\ucrt64\bin` to `PATH` and link without `-static` if you prefer a smaller binary.
+   ```sh
+   ./Raytracer input1.txt
    ```
 
-2. **Execute** the compiled program:
-   ```sh
-   ./Raytracer
-   ```
-
-3. The program will read mesh data from a file, compute intersections, and generate an image based on the specified camera, lights, and materials.
+3. The program reads the scene file, computes intersections, and generates **`output.png`** from the camera, lights, and materials.
 
 ## Input Files
 

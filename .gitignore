@@ -1,0 +1,36 @@
+# Build
+*.exe
+*.o
+*.obj
+*.out
+*.app
+Raytracer
+Raytracer.exe
+
+# Generated images
+output.png
+output.ppm
+output_*.png
+output_*.ppm
+
+# IDE / editor
+.idea/
+.vs/
+*.user
+*.suo
+
+# clangd cache (index); keep `.clangd` in repo if you use it for the team
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

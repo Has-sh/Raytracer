@@ -1,2 +1,2 @@
-all: 
-	g++ -O3 -o Raytracer Raytracer.cpp
+all:
+	g++ -std=c++17 -O3 -Wall -Wextra -static -o Raytracer Raytracer.cpp

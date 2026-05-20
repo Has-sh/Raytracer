@@ -7,6 +7,16 @@
 #include <cmath>
 #include <limits>
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
 class Color {
 public:
     float r, g, b;
@@ -55,7 +65,6 @@ void parseTag(const std::string& fileName, const std::string& tag, std::vector<s
             break;
         }
     }
-    inputFile.close();
 }
 
 Color parseBackgroundColor(const std::string& fileName) {
@@ -67,17 +76,6 @@ Color parseBackgroundColor(const std::string& fileName) {
         iss >> color.r >> color.g >> color.b;
     }
     return color;
-}
-
-int parseMaxRecursionDepth(const std::string& fileName) {
-    std::vector<std::string> values;
-    parseTag(fileName, "#MaxRecursionDepth", values);
-    int depth = 0;
-    if (values.size() == 1) {
-        std::istringstream iss(values[0]);
-        iss >> depth;
-    }
-    return depth;
 }
 
 float parseShadowRayEpsilon(const std::string& fileName) {
@@ -151,7 +149,6 @@ std::vector<Material> parseMaterials(const std::string& fileName) {
             }
         }
     }
-    inputFile.close();
     return materials;
 }
 
@@ -191,7 +188,6 @@ std::vector<PointLight> parsePointLights(const std::string& fileName) {
             }
         }
     }
-    inputFile.close();
     return pointLights;
 }
 
@@ -234,7 +230,6 @@ std::vector<std::tuple<int, int, int, float>> parseSpheres(const std::string& fi
             spheres.push_back(sphere);
         }
     }
-    inputFile.close();
     return spheres;
 }
 
@@ -260,7 +255,6 @@ std::vector<std::tuple<int, int,int, int, int>> parseTriangles(const std::string
             triangles.push_back(triangle);
         }
     }
-    inputFile.close();
     return triangles;
 }
 
@@ -293,36 +287,32 @@ std::vector<std::tuple<int, int, std::vector<int>>> parseMeshes(const std::strin
             meshes.push_back(mesh);
         }
     }
-    inputFile.close();
     return meshes;
 }
 
 bool computeSphereIntersection(std::vector<Vertex> vertexList,std::vector<std::tuple<int, int, int, float>> spheres,std::vector<Material> materials , float cameraX,float cameraY,float cameraZ, float sx, float sy, float sz, float* t,  Material& sphereMaterial, Vertex& center) {
-    int sphereVertexId;
-    float radius, t1= std::numeric_limits<float>::infinity(), t2= std::numeric_limits<float>::infinity();
+    float closest_t = std::numeric_limits<float>::infinity();
     bool intersectionFound = false;
-    
-    for (const auto& sphere : spheres) {
 
-        sphereVertexId = std::get<2>(sphere);
-        radius = std::get<3>(sphere);
+    for (const auto& sphere : spheres) {
+        int sphereVertexId = std::get<2>(sphere);
+        float radius = std::get<3>(sphere);
         int index = std::get<1>(sphere);
 
+        Material mat;
         for (const auto& material : materials) {
-            if(material.index==index){
-                sphereMaterial=material;
+            if (material.index == index) {
+                mat = material;
                 break;
             }
         }
-        // Retrieve sphere center vertex from vertex list
+
         Vertex sphereCenter = vertexList[sphereVertexId - 1];
-        // *rad=radius;
-        center=sphereCenter;
-        // Calculate components of the equation
+
         float ox = cameraX;
         float oy = cameraY;
         float oz = cameraZ;
-        
+
         float dx = sx;
         float dy = sy;
         float dz = sz;
@@ -331,33 +321,39 @@ bool computeSphereIntersection(std::vector<Vertex> vertexList,std::vector<std::t
         float cy = sphereCenter.y;
         float cz = sphereCenter.z;
 
-        // Calculate t using the provided formula
         float a = dx * dx + dy * dy + dz * dz;
         float b = dx * (ox - cx) + dy * (oy - cy) + dz * (oz - cz);
         float c = ((ox - cx) * (ox - cx) + (oy - cy) * (oy - cy) + (oz - cz) * (oz - cz)) - (radius * radius);
-        
-        float discriminant = b * b - (a * c);
-        
-        if (discriminant >= 0) {
 
-            t1 = (-b + std::sqrt(discriminant)) / (a);
-            t2 = (-b - std::sqrt(discriminant)) / (a);
-            
-            if (t1 > 0 && t1 < t2) {
-                intersectionFound = true;
-                *t = t1;
-            }
-            else if (t2 > 0 && t2 < std::numeric_limits<float>::infinity()) {
-                intersectionFound = true;
-                *t = t2;
-            }
+        float discriminant = b * b - (a * c);
+
+        if (discriminant < 0.0f)
+            continue;
+
+        float sqrtDisc = std::sqrt(discriminant);
+        float t1 = (-b + sqrtDisc) / a;
+        float t2 = (-b - sqrtDisc) / a;
+
+        float candidate_t = std::numeric_limits<float>::infinity();
+        if (t1 > 0.0f)
+            candidate_t = t1;
+        if (t2 > 0.0f && t2 < candidate_t)
+            candidate_t = t2;
+
+        if (candidate_t < closest_t) {
+            closest_t = candidate_t;
+            center = sphereCenter;
+            sphereMaterial = mat;
+            intersectionFound = true;
         }
     }
+
+    if (intersectionFound)
+        *t = closest_t;
     return intersectionFound;
 }
 
 bool intersectRayTriangle(const Vertex& a, const Vertex& b, const Vertex& c, float ox, float oy, float oz, float dx, float dy, float dz, float* t) {
-    // Calculate edge vectors
     float ax = b.x - a.x;
     float ay = b.y - a.y;
     float az = b.z - a.z;
@@ -366,7 +362,6 @@ bool intersectRayTriangle(const Vertex& a, const Vertex& b, const Vertex& c, flo
     float by = c.y - a.y;
     float bz = c.z - a.z;
 
-    // Calculate determinant and check if ray and triangle are parallel
     float px = dy * bz - dz * by;
     float py = dz * bx - dx * bz;
     float pz = dx * by - dy * bx;
@@ -377,17 +372,14 @@ bool intersectRayTriangle(const Vertex& a, const Vertex& b, const Vertex& c, flo
 
     float invDet = 1.0f / det;
 
-    // Calculate distance from v0 to ray origin
     float tx = ox - a.x;
     float ty = oy - a.y;
     float tz = oz - a.z;
 
-    // Calculate u parameter and test bounds
     float u = (tx * px + ty * py + tz * pz) * invDet;
     if (u < 0.0f || u > 1.0f)
         return false;
 
-    // Calculate qvec and v parameter
     float qx = ty * az - tz * ay;
     float qy = tz * ax - tx * az;
     float qz = tx * ay - ty * ax;
@@ -396,21 +388,21 @@ bool intersectRayTriangle(const Vertex& a, const Vertex& b, const Vertex& c, flo
     if (v < 0.0f || u + v > 1.0f)
         return false;
 
-    // Calculate t, the distance from the ray origin to the intersection point
     *t = (bx * qx + by * qy + bz * qz) * invDet;
 
     return *t >= 0.0f;
 }
 
 bool computeTriangleIntersection(std::vector<Vertex> vertexList,std::vector<std::tuple<int, int, int, int, int>> triangles,std::vector<Material> materials, float cameraX, float cameraY, float cameraZ, float sx, float sy, float sz, float* t, Material& triangleMaterial, Vertex& v0, Vertex& v1, Vertex& v2) {
+    float closest_t = std::numeric_limits<float>::infinity();
     bool intersectionFound = false;
 
     for (const auto& triangle : triangles) {
-
         int index = std::get<1>(triangle);
+        Material mat;
         for (const auto& material : materials) {
-            if(material.index==index){
-                triangleMaterial=material;
+            if (material.index == index) {
+                mat = material;
                 break;
             }
         }
@@ -419,55 +411,68 @@ bool computeTriangleIntersection(std::vector<Vertex> vertexList,std::vector<std:
         int v1Index = std::get<3>(triangle);
         int v2Index = std::get<4>(triangle);
 
-        // Retrieve triangle vertices from vertex list
-        v0 = vertexList[v0Index - 1];
-        v1 = vertexList[v1Index - 1];
-        v2 = vertexList[v2Index - 1];
+        Vertex tv0 = vertexList[v0Index - 1];
+        Vertex tv1 = vertexList[v1Index - 1];
+        Vertex tv2 = vertexList[v2Index - 1];
 
-        if (intersectRayTriangle(v0, v1, v2, cameraX,cameraY,cameraZ, sx,sy,sz,t)) {
+        float tri_t;
+        if (intersectRayTriangle(tv0, tv1, tv2, cameraX, cameraY, cameraZ, sx, sy, sz, &tri_t) && tri_t < closest_t) {
+            closest_t = tri_t;
+            v0 = tv0;
+            v1 = tv1;
+            v2 = tv2;
+            triangleMaterial = mat;
             intersectionFound = true;
-            return intersectionFound;   
         }
     }
+
+    if (intersectionFound)
+        *t = closest_t;
     return intersectionFound;
 }
 
 bool computeMeshIntersection(std::vector<Vertex> vertexList, std::vector<std::tuple<int, int, std::vector<int>>> meshes ,std::vector<Material> materials, float cameraX, float cameraY, float cameraZ, float sx, float sy, float sz, float* t, Material& meshMaterial, Vertex& v0, Vertex& v1, Vertex& v2) {
+    float closest_t = std::numeric_limits<float>::infinity();
     bool intersectionFound = false;
-    
+
     for (const auto& mesh : meshes) {
-        
         int index = std::get<1>(mesh);
+        Material mat;
         for (const auto& material : materials) {
-            if(material.index==index){
-                meshMaterial=material;
+            if (material.index == index) {
+                mat = material;
                 break;
             }
         }
 
         const auto& indicesList = std::get<2>(mesh);
-        for (int i = 0; i < indicesList.size(); i += 3) {
-
+        for (int i = 0; i < static_cast<int>(indicesList.size()); i += 3) {
             int v0Index = indicesList[i];
             int v1Index = indicesList[i + 1];
             int v2Index = indicesList[i + 2];
 
-            // Retrieve triangle vertices from vertex list
-            v0 = vertexList[v0Index - 1];
-            v1 = vertexList[v1Index - 1];
-            v2 = vertexList[v2Index - 1];
+            Vertex tv0 = vertexList[v0Index - 1];
+            Vertex tv1 = vertexList[v1Index - 1];
+            Vertex tv2 = vertexList[v2Index - 1];
 
-            // Check for intersection with the triangle
-            if (intersectRayTriangle(v0, v1, v2, cameraX,cameraY,cameraZ, sx,sy,sz,t)) {
+            float tri_t;
+            if (intersectRayTriangle(tv0, tv1, tv2, cameraX, cameraY, cameraZ, sx, sy, sz, &tri_t) && tri_t < closest_t) {
+                closest_t = tri_t;
+                v0 = tv0;
+                v1 = tv1;
+                v2 = tv2;
+                meshMaterial = mat;
                 intersectionFound = true;
-                return intersectionFound;
             }
         }
     }
+
+    if (intersectionFound)
+        *t = closest_t;
     return intersectionFound;
 }
 
-std::tuple<std::vector<float>, Material> computeCameraRay(Camera camera, Color backgroundColor,std::vector<Vertex> vertexList,std::vector<std::tuple<int, int, int, float>> spheres,std::vector<std::tuple<int, int, int, int, int>> triangles, std::vector<std::tuple<int, int, std::vector<int>>> meshes,std::vector<Material> materials, int i, int j, float *sx, float *sy, float *sz, Vertex& normal) {
+std::tuple<std::vector<float>, Material, bool> computeCameraRay(Camera camera, Color backgroundColor,std::vector<Vertex> vertexList,std::vector<std::tuple<int, int, int, float>> spheres,std::vector<std::tuple<int, int, int, int, int>> triangles, std::vector<std::tuple<int, int, std::vector<int>>> meshes,std::vector<Material> materials, int i, int j, float *sx, float *sy, float *sz, Vertex& normal) {
     std::vector<float> ray(3, 0.0f);
     Material material1,material2,material3,material;
     Vertex center, v0, v1, v2;
@@ -477,26 +482,21 @@ std::tuple<std::vector<float>, Material> computeCameraRay(Camera camera, Color b
     float t3 = std::numeric_limits<float>::infinity();
     float min_t = std::numeric_limits<float>::infinity();
 
-    // Compute m = e + -wd
     float mx = camera.x + camera.gazeX * camera.distance;
     float my = camera.y + camera.gazeY * camera.distance;
     float mz = camera.z + camera.gazeZ * camera.distance;
 
-    // Compute u = gaze x v
     float ux = camera.gazeY * camera.upZ - (camera.gazeZ * camera.upY);
     float uy = camera.gazeZ * camera.upX - (camera.gazeX * camera.upZ);
     float uz = camera.gazeX * camera.upY - (camera.gazeY * camera.upX);
 
-    // Compute q = m + lu + tv
     float qx = mx + camera.left * ux + camera.top * camera.upX;
     float qy = my + camera.left * uy + camera.top * camera.upY;
     float qz = mz + camera.left * uz + camera.top * camera.upZ;
 
-    // Compute su and sv
     float su = (camera.right - camera.left) * (i + 0.5f) / camera.width;
     float sv = (camera.top - camera.bottom) * (j + 0.5f) / camera.height;
-    
-    // Compute s = q + suu - svv
+
     *sx = qx + su * ux - sv * camera.upX;
     *sy = qy + su * uy - sv * camera.upY;
     *sz = qz + su * uz - sv * camera.upZ;
@@ -584,23 +584,13 @@ std::tuple<std::vector<float>, Material> computeCameraRay(Camera camera, Color b
 
         Vertex e1 = {v1.x - v0.x, v1.y - v0.y, v1.z - v0.z};
         Vertex e2 = {v2.x - v0.x, v2.y - v0.y, v2.z - v0.z};
-        
-        float length = std::sqrt(e1.x * e1.x + e1.y * e1.y + e1.z * e1.z);
-        e1.x /= length;
-        e1.y /= length;
-        e1.z /= length;
-
-        length = std::sqrt(e2.x * e2.x + e2.y * e2.y + e2.z * e2.z);
-        e2.x /= length;
-        e2.y /= length;
-        e2.z /= length;
 
         normal.x = e1.y * e2.z - e1.z * e2.y;
         normal.y = e1.z * e2.x - e1.x * e2.z;
         normal.z = e1.x * e2.y - e1.y * e2.x;
 
-        length = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-        
+        float length = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+
         if (length != 0.0f) {
             normal.x /= length;
             normal.y /= length;
@@ -615,47 +605,55 @@ std::tuple<std::vector<float>, Material> computeCameraRay(Camera camera, Color b
         ray[1] = backgroundColor.g;
         ray[2] = backgroundColor.b;
     }
-    
-    return std::make_tuple(ray, material);
+
+    bool hitGeometry = (min_index >= 0);
+    return std::make_tuple(ray, material, hitGeometry);
 }
 
-bool computeShadow(std::vector<Vertex> vertexList,std::vector<Material> materials,std::vector<std::tuple<int, int, int, float>> spheres,std::vector<std::tuple<int, int, int, int, int>> triangles,std::vector<std::tuple<int, int, std::vector<int>>> meshes,std::vector<PointLight> pointLights, float shadowRayEpsilon, std::vector<float> ray){
+bool computeShadow(std::vector<Vertex> vertexList, std::vector<Material> materials, std::vector<std::tuple<int, int, int, float>> spheres, std::vector<std::tuple<int, int, int, int, int>> triangles, std::vector<std::tuple<int, int, std::vector<int>>> meshes, const PointLight& light, float shadowRayEpsilon, const std::vector<float>& ray) {
+    float shadowRayX = light.x - ray[0];
+    float shadowRayY = light.y - ray[1];
+    float shadowRayZ = light.z - ray[2];
+    float shadowRayDistance = std::sqrt(shadowRayX * shadowRayX + shadowRayY * shadowRayY + shadowRayZ * shadowRayZ);
+
+    if (shadowRayDistance <= shadowRayEpsilon)
+        return false;
+
+    shadowRayX /= shadowRayDistance;
+    shadowRayY /= shadowRayDistance;
+    shadowRayZ /= shadowRayDistance;
+
+    float shadowRayOriginX = ray[0] + shadowRayX * shadowRayEpsilon;
+    float shadowRayOriginY = ray[1] + shadowRayY * shadowRayEpsilon;
+    float shadowRayOriginZ = ray[2] + shadowRayZ * shadowRayEpsilon;
+
+    float maxT = shadowRayDistance - shadowRayEpsilon;
 
     Vertex center, v0, v1, v2;
     Material material;
-    float t= std::numeric_limits<float>::infinity();
+    float closestT = std::numeric_limits<float>::infinity();
+    float t;
 
-    bool shadow = false;
+    if (computeSphereIntersection(vertexList, spheres, materials, shadowRayOriginX, shadowRayOriginY, shadowRayOriginZ, shadowRayX, shadowRayY, shadowRayZ, &t, material, center) && t < closestT)
+        closestT = t;
+    if (computeTriangleIntersection(vertexList, triangles, materials, shadowRayOriginX, shadowRayOriginY, shadowRayOriginZ, shadowRayX, shadowRayY, shadowRayZ, &t, material, v0, v1, v2) && t < closestT)
+        closestT = t;
+    if (computeMeshIntersection(vertexList, meshes, materials, shadowRayOriginX, shadowRayOriginY, shadowRayOriginZ, shadowRayX, shadowRayY, shadowRayZ, &t, material, v0, v1, v2) && t < closestT)
+        closestT = t;
 
-    for (const auto& light : pointLights) {
-
-        float shadowRayX = light.x - ray[0];
-        float shadowRayY = light.y - ray[1];
-        float shadowRayZ = light.z - ray[2];
-        float shadowRayDistance = std::sqrt(shadowRayX * shadowRayX + shadowRayY * shadowRayY + shadowRayZ * shadowRayZ);
-        
-        shadowRayX /= shadowRayDistance;
-        shadowRayY /= shadowRayDistance;
-        shadowRayZ /= shadowRayDistance;
-
-        //(x+wi)*epislon
-        float shadowRayOriginX = ray[0] + shadowRayX * shadowRayEpsilon; 
-        float shadowRayOriginY = ray[1] + shadowRayY * shadowRayEpsilon; 
-        float shadowRayOriginZ = ray[2] + shadowRayZ * shadowRayEpsilon; 
-
-        if (computeSphereIntersection (vertexList, spheres, materials, shadowRayOriginX, shadowRayOriginY, shadowRayOriginZ, shadowRayX, shadowRayY, shadowRayZ, &t, material, center) 
-        || (computeTriangleIntersection (vertexList, triangles, materials, shadowRayOriginX, shadowRayOriginY, shadowRayOriginZ, shadowRayX, shadowRayY, shadowRayZ, &t, material, v0, v1, v2)) 
-        || (computeMeshIntersection (vertexList, meshes, materials, shadowRayOriginX, shadowRayOriginY, shadowRayOriginZ, shadowRayX, shadowRayY, shadowRayZ, &t, material, v0, v1, v2))) {
-            shadow = true;
-        }
-
-    }
-    return shadow;
+    return closestT < maxT && closestT > shadowRayEpsilon;
 }
 
 Color computeLighting(std::vector<Vertex> vertexList,std::vector<Material> materials,std::vector<std::tuple<int, int, int, float>> spheres,std::vector<std::tuple<int, int, int, int, int>> triangles,std::vector<std::tuple<int, int, std::vector<int>>> meshes,std::vector<PointLight> pointLights, float shadowRayEpsilon,Camera camera,Color ambientLight, Material& material, std::vector<float> ray, Vertex& normal) {
 
     Vertex viewDirection = {camera.x - ray[0] , camera.y - ray[1], camera.z - ray[2]};
+    float viewDirectionDistance = std::sqrt(viewDirection.x * viewDirection.x + viewDirection.y * viewDirection.y + viewDirection.z * viewDirection.z);
+    if (viewDirectionDistance != 0.0f) {
+        viewDirection.x /= viewDirectionDistance;
+        viewDirection.y /= viewDirectionDistance;
+        viewDirection.z /= viewDirectionDistance;
+    }
+
     Color lighting={0.0f,0.0f,0.0f};
     
     float lightIntensity_R, lightIntensity_G, lightIntensity_B;
@@ -665,13 +663,8 @@ Color computeLighting(std::vector<Vertex> vertexList,std::vector<Material> mater
     float ambientFunc_b = (material.ambient.b) * (ambientLight.b / 255.0f);
 
     for (const auto& light : pointLights) {
-        
-        if (computeShadow(vertexList,materials,spheres,triangles,meshes,pointLights,shadowRayEpsilon, ray)) {
-            lighting.r = ambientFunc_r;
-            lighting.g = ambientFunc_g;
-            lighting.b = ambientFunc_b;
-            return lighting;
-        }
+        if (computeShadow(vertexList, materials, spheres, triangles, meshes, light, shadowRayEpsilon, ray))
+            continue;
 
         float lightDirX = (light.x - ray[0]);
         float lightDirY = (light.y - ray[1]);
@@ -694,19 +687,15 @@ Color computeLighting(std::vector<Vertex> vertexList,std::vector<Material> mater
         float diffuseFunc_r = material.diffuse.r * (lightIntensity_R / (lightDistance * lightDistance)) * diffuseDot;
         float diffuseFunc_g = material.diffuse.g * (lightIntensity_G / (lightDistance * lightDistance)) * diffuseDot;
         float diffuseFunc_b = material.diffuse.b * (lightIntensity_B / (lightDistance * lightDistance)) * diffuseDot;
-        float viewDirectionDistance = std::sqrt(viewDirection.x * viewDirection.x + viewDirection.y * viewDirection.y + viewDirection.z * viewDirection.z);
-        
-        viewDirection.x /= viewDirectionDistance;
-        viewDirection.y /= viewDirectionDistance;
-        viewDirection.z /= viewDirectionDistance;
         
         Vertex halfVec = {(lightDirX + viewDirection.x), (lightDirY + viewDirection.y), (lightDirZ + viewDirection.z)};
         float halfVecLength = std::sqrt(halfVec.x * halfVec.x + halfVec.y * halfVec.y + halfVec.z * halfVec.z);
-        halfVec.x /= halfVecLength;
-        halfVec.y /= halfVecLength;
-        halfVec.z /= halfVecLength;
+        if (halfVecLength != 0.0f) {
+            halfVec.x /= halfVecLength;
+            halfVec.y /= halfVecLength;
+            halfVec.z /= halfVecLength;
+        }
 
-        // // Calculate specular dot product
         float specularDot = std::max(0.0f, normal.x * halfVec.x + normal.y * halfVec.y + normal.z * halfVec.z);
 
         specularDot = std::pow(specularDot, material.specularExponent);
@@ -731,10 +720,19 @@ Color computeLighting(std::vector<Vertex> vertexList,std::vector<Material> mater
 }
 
 int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << (argv[0] ? argv[0] : "Raytracer") << " <input_scene_file>\n";
+        return 1;
+    }
+
     std::string inputFilename = argv[1];
-    std::ofstream outputFile("output.ppm", std::ios::binary);
 
     Camera camera = parseCamera(inputFilename);
+    if (camera.width <= 0 || camera.height <= 0) {
+        std::cerr << "Error: Invalid camera resolution.\n";
+        return 1;
+    }
+
     Color backgroundColor = parseBackgroundColor(inputFilename);
     std::vector<Vertex> vertexList = parseVertexList(inputFilename);
     std::vector<std::tuple<int, int, int, float>> spheres = parseSpheres(inputFilename);
@@ -745,38 +743,56 @@ int main(int argc, char* argv[]) {
     float shadowRayEpsilon = parseShadowRayEpsilon(inputFilename);
     std::vector<std::tuple<int, int, std::vector<int>>> meshes = parseMeshes(inputFilename);
 
+    size_t meshTriangles = 0;
+    for (const auto& mesh : meshes)
+        meshTriangles += std::get<2>(mesh).size() / 3;
+    std::cerr << "Scene loaded: " << vertexList.size() << " verts, " << spheres.size() << " spheres, "
+              << triangles.size() << " tris, " << meshes.size() << " meshes (~" << meshTriangles << " mesh tris), "
+              << camera.width << "x" << camera.height << " pixels\n";
+
     float sx, sy, sz;
     Vertex normal = {0, 0, 0};
-    if (outputFile.is_open()) {
-        outputFile << "P6\n" << camera.width << " " << camera.height << "\n255\n";
+    const size_t w = static_cast<size_t>(camera.width);
+    const size_t h = static_cast<size_t>(camera.height);
+    std::vector<unsigned char> image(w * h * 3);
 
-        for (int j = 0; j < camera.height; j++) {
-            for (int i = 0; i < camera.width; i++) {
-                std::tuple<std::vector<float>, Material> rayAndMaterial = computeCameraRay(camera, backgroundColor, vertexList, spheres, triangles, meshes, materials, i, j, &sx, &sy, &sz, normal);
-                std::vector<float> ray = std::get<0>(rayAndMaterial);
-                Material material = std::get<1>(rayAndMaterial);
-                Color pixelColor;
+    // Progress: log scanlines so long renders (e.g. huge meshes) show activity on stderr.
+    const int progressStep = (camera.height / 40) > 0 ? (camera.height / 40) : 1;
 
-                if (ray[0] == backgroundColor.r && ray[1] == backgroundColor.g && ray[2] == backgroundColor.b) {
-                    pixelColor = backgroundColor;
-                } else {
-                    Color lighting = computeLighting(vertexList, materials, spheres, triangles, meshes, pointLights, shadowRayEpsilon, camera, ambientLight, material, ray, normal);
-                    pixelColor.r = lighting.r;
-                    pixelColor.g = lighting.g;
-                    pixelColor.b = lighting.b;
-                }
-                unsigned char r = (unsigned char)(pixelColor.r * 255);
-                unsigned char g = (unsigned char)(pixelColor.g * 255);
-                unsigned char b = (unsigned char)(pixelColor.b * 255);
+    for (int j = 0; j < camera.height; j++) {
+        for (int i = 0; i < camera.width; i++) {
+            std::tuple<std::vector<float>, Material, bool> rayAndMaterial = computeCameraRay(camera, backgroundColor, vertexList, spheres, triangles, meshes, materials, i, j, &sx, &sy, &sz, normal);
+            std::vector<float> ray = std::get<0>(rayAndMaterial);
+            Material material = std::get<1>(rayAndMaterial);
+            bool hitGeometry = std::get<2>(rayAndMaterial);
+            Color pixelColor;
 
-                outputFile << r << g << b;
+            if (!hitGeometry) {
+                pixelColor = backgroundColor;
+            } else {
+                Color lighting = computeLighting(vertexList, materials, spheres, triangles, meshes, pointLights, shadowRayEpsilon, camera, ambientLight, material, ray, normal);
+                pixelColor.r = lighting.r;
+                pixelColor.g = lighting.g;
+                pixelColor.b = lighting.b;
             }
+            const size_t idx = (static_cast<size_t>(j) * w + static_cast<size_t>(i)) * 3;
+            image[idx] = static_cast<unsigned char>(pixelColor.r * 255.0f);
+            image[idx + 1] = static_cast<unsigned char>(pixelColor.g * 255.0f);
+            image[idx + 2] = static_cast<unsigned char>(pixelColor.b * 255.0f);
         }
-
-        outputFile.close();
-        std::cout << "Output file 'output.ppm' generated successfully." << std::endl;
-    } else {
-        std::cerr << "Error: Unable to open output file." << std::endl;
+        if (j % progressStep == 0 || j + 1 == camera.height) {
+            const int pct = static_cast<int>((100.0f * static_cast<float>(j + 1)) / static_cast<float>(camera.height));
+            std::cerr << "  render row " << (j + 1) << " / " << camera.height << " (" << pct << "%)\n" << std::flush;
+        }
     }
+
+    std::cerr << "Writing output.png ...\n" << std::flush;
+    const int stride = camera.width * 3;
+    if (!stbi_write_png("output.png", camera.width, camera.height, 3, image.data(), stride)) {
+        std::cerr << "Error: Failed to write output.png.\n";
+        return 1;
+    }
+
+    std::cout << "Output file 'output.png' generated successfully." << std::endl;
     return 0;
 }
